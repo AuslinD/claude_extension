@@ -1,0 +1,204 @@
+/* Claude Chat Colors — everything is namespaced with ccc- / data-ccc-* */
+
+#ccc-topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--ccc-color);
+  z-index: 2147483646;
+  pointer-events: none;
+}
+
+#ccc-tint {
+  position: fixed;
+  inset: 0;
+  background: var(--ccc-color);
+  opacity: 0.06;
+  z-index: 2147483640;
+  pointer-events: none;
+}
+
+#ccc-topbar[hidden], #ccc-tint[hidden], #ccc-pill[hidden] { display: none !important; }
+
+[data-ccc-composer] {
+  box-shadow:
+    0 0 0 2px var(--ccc-color),
+    0 0 16px 2px color-mix(in srgb, var(--ccc-color) 40%, transparent) !important;
+}
+
+#ccc-pill {
+  position: fixed;
+  z-index: 2147483645;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(50vw, 420px);
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  background: var(--ccc-color);
+  color: var(--ccc-text, #fff);
+  font: 600 12px/16px system-ui, -apple-system, sans-serif;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  user-select: none;
+}
+#ccc-pill .ccc-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ccc-text, #fff);
+  opacity: 0.85;
+}
+#ccc-pill .ccc-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ---------- sidebar ---------- */
+
+/* Every chat: a 6px stripe plus a soft wash of its color fading out to the right. */
+a[data-ccc-id] {
+  position: relative;
+  box-shadow: inset 6px 0 0 var(--ccc-c) !important;
+  background-image: linear-gradient(90deg, color-mix(in srgb, var(--ccc-c) 22%, transparent), transparent 75%) !important;
+}
+a[data-ccc-id][data-ccc-current] {
+  background-image: none !important;
+  background-color: color-mix(in srgb, var(--ccc-c) 30%, transparent) !important;
+}
+
+/* Status marker on the right edge. */
+a[data-ccc-status] { padding-right: 30px !important; }
+a[data-ccc-status]::after {
+  content: '';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 2;
+}
+a[data-ccc-status="running"]::after {
+  border: 2px solid var(--ccc-c);
+  border-top-color: transparent;
+  animation: ccc-spin 0.8s linear infinite;
+}
+
+/* Finished and not looked at yet: outline the whole row and show a "Done" badge. */
+a[data-ccc-status="done"], a[data-ccc-status="uncertain"] {
+  padding-right: 64px !important;
+  font-weight: 600 !important;
+  outline: 2px solid #16a34a;
+  outline-offset: -2px;
+}
+a[data-ccc-status="done"]::after, a[data-ccc-status="uncertain"]::after {
+  content: '\2713  Done';
+  width: auto;
+  height: 18px;
+  margin-top: -9px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font: 600 11px/18px system-ui, -apple-system, sans-serif;
+  white-space: pre;
+  background: #16a34a;
+  color: #fff;
+  animation: ccc-pulse 2s ease-in-out 3;
+}
+a[data-ccc-status="uncertain"] { outline-style: dashed; }
+a[data-ccc-status="uncertain"]::after {
+  content: '\2713  Done?';
+  background: transparent;
+  color: #16a34a;
+  border: 1.5px solid #16a34a;
+  line-height: 15px;
+}
+
+@keyframes ccc-spin { to { transform: rotate(360deg); } }
+@keyframes ccc-pulse { 50% { box-shadow: 0 0 0 5px rgba(22, 163, 74, 0.25); } }
+
+/* ---------- picker ---------- */
+
+#ccc-picker {
+  position: fixed;
+  z-index: 2147483647;
+  width: 372px;
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
+  padding: 12px;
+  border-radius: 12px;
+  background: #fff;
+  color: #1f1f1f;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.28);
+  font: 13px/1.35 system-ui, -apple-system, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  #ccc-picker { background: #2b2a27; color: #f1efe8; border-color: rgba(255, 255, 255, 0.15); }
+}
+#ccc-picker .ccc-title {
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+#ccc-picker .ccc-src { margin: 2px 0 10px; font-size: 12px; opacity: 0.75; }
+#ccc-picker .ccc-actions button, #ccc-picker .ccc-seg button {
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+#ccc-picker .ccc-actions button:hover, #ccc-picker .ccc-seg button:hover { background: rgba(127, 127, 127, 0.15); }
+#ccc-picker .ccc-seg { display: inline-flex; margin-bottom: 10px; }
+#ccc-picker .ccc-seg button { border-radius: 0; }
+#ccc-picker .ccc-seg button:first-child { border-radius: 6px 0 0 6px; }
+#ccc-picker .ccc-seg button:last-child { border-radius: 0 6px 6px 0; border-left: none; }
+#ccc-picker .ccc-seg button.ccc-on { background: #1f1f1f; color: #fff; border-color: #1f1f1f; }
+@media (prefers-color-scheme: dark) {
+  #ccc-picker .ccc-seg button.ccc-on { background: #f1efe8; color: #1f1f1f; border-color: #f1efe8; }
+}
+#ccc-picker .ccc-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+
+/* ---------- palette (shared with the popup) ---------- */
+
+.ccc-palette .ccc-pal-grid { display: grid; gap: 3px; }
+.ccc-palette button.ccc-pal-swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+.ccc-palette button.ccc-pal-swatch:hover { transform: scale(1.25); position: relative; z-index: 1; }
+.ccc-palette button.ccc-pal-swatch.ccc-selected { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #1f1f1f; position: relative; z-index: 1; }
+.ccc-palette .ccc-pal-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 8px; }
+.ccc-palette .ccc-pal-row button.ccc-pal-swatch { width: 18px; height: 18px; }
+.ccc-palette .ccc-pal-label { width: 100%; margin-top: 8px; font-size: 11px; opacity: 0.7; }
+.ccc-palette .ccc-pal-custom .ccc-pal-label { width: auto; margin: 0 4px 0 0; }
+.ccc-palette input[type="color"] { width: 34px; height: 24px; padding: 0; border: none; background: none; cursor: pointer; }
+.ccc-palette input[type="text"] {
+  width: 76px;
+  font: 12px ui-monospace, monospace;
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+  background: transparent;
+  color: inherit;
+}
+.ccc-palette input.ccc-invalid { border-color: #ef4444; }
+.ccc-palette .ccc-pal-name { margin-top: 8px; min-height: 16px; font-size: 12px; opacity: 0.8; }

@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Alpha chat - Claude</title>
+  <link rel="stylesheet" href="../src/content.css">
+  <style>
+    body { margin: 0; display: flex; font: 14px system-ui; }
+    nav { width: 240px; padding: 16px 8px; background: #f3f1ea; height: 100vh; box-sizing: border-box; }
+    nav a { display: block; padding: 6px 10px; margin: 2px 0; color: inherit; text-decoration: none; border-radius: 6px; }
+    main { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; padding: 24px; height: 100vh; box-sizing: border-box; }
+    fieldset { border: 1px solid #ccc; border-radius: 16px; padding: 12px; margin: 0; }
+    .ProseMirror { min-height: 40px; outline: none; }
+  </style>
+  <script>
+    window.CCC_IDS = {
+      A: 'aaaaaaaa-0000-4000-8000-000000000001',
+      B: 'bbbbbbbb-0000-4000-8000-000000000002',
+      C: 'cccccccc-0000-4000-8000-000000000003',
+      D: 'dddddddd-0000-4000-8000-000000000004',
+      P: 'eeeeeeee-0000-4000-8000-00000000000f',
+    };
+    window.CCC_TEST = {
+      path: '/chat/' + CCC_IDS.A,
+      viewing: true,
+      seed: { sync: {}, local: {
+        projectMap: { [CCC_IDS.C]: CCC_IDS.P, [CCC_IDS.D]: CCC_IDS.P },
+        projectRank: { [CCC_IDS.C]: 0, [CCC_IDS.D]: 2 }, // C = newest in the project, D = 3rd newest
+      } },
+    };
+  </script>
+</head>
+<body>
+  <nav>
+    <a id="link-A" href="/chat/aaaaaaaa-0000-4000-8000-000000000001">Alpha chat</a>
+    <a id="link-B" href="/chat/bbbbbbbb-0000-4000-8000-000000000002">Beta chat</a>
+    <a id="link-C" href="/chat/cccccccc-0000-4000-8000-000000000003">Gamma (project)</a>
+    <a id="link-D" href="/chat/dddddddd-0000-4000-8000-000000000004">Delta (project)</a>
+  </nav>
+  <main>
+    <div class="font-claude-message">A message linking to <a id="msg-link" href="/chat/bbbbbbbb-0000-4000-8000-000000000002">another chat</a>.</div>
+    <fieldset><div class="ProseMirror" contenteditable="true"></div></fieldset>
+  </main>
+
+  <script src="chrome-shim.js"></script>
+  <script src="../src/colors.js"></script>
+  <script src="../src/selectors.js"></script>
+  <script src="../src/status.js"></script>
+  <script>
+    Object.assign(CCC.status.config, { HEARTBEAT_MS: 500, STALE_MS: 2000, POLL_MS: 1000, FALLBACK_MS: 5000 });
+  </script>
+  <script src="../src/storage.js"></script>
+  <script src="../src/api.js"></script>
+  <script src="../src/palette-ui.js"></script>
+  <script src="../src/content.js"></script>
+  <script src="fixture-run.js"></script>
+</body>
+</html>
