@@ -64,6 +64,11 @@ test('fixture scenario in headless Chrome', { skip: !CHROME && 'Chrome not found
   assert.ok(i.links.A.current && !i.links.B.current, 'current chat highlighted');
   assert.equal(i.msgLinkPainted, false, 'links inside messages are not painted');
 
+  // Label follows the message box as it grows while typing
+  assert.ok(R.pillAfterGrow.boxTop < R.pillBefore.boxTop - 100, 'test setup: box actually grew upward');
+  assert.ok(Math.abs(R.pillBefore.offset) <= 1, `label centered on box edge before (${R.pillBefore.offset}px)`);
+  assert.ok(Math.abs(R.pillAfterGrow.offset) <= 1, `label still on box edge after growing (${R.pillAfterGrow.offset}px off)`);
+
   // Project: same color family, older chat visibly faded
   const projectBase = Colors.autoColor(2);
   assert.equal(i.links.C.color, projectBase, 'newest project chat = full project color');

@@ -15,6 +15,7 @@
   let current = { path: null, chatId: null };
   let preview = null; // { chatId, color } while dragging the color input
   let composerEl = null;
+  const composerResize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => positionPill()) : null;
   let paintTimer = null;
   let lastPaint = 0;
   let timers = [];
@@ -128,7 +129,14 @@
 
   function paintComposer(id) {
     const comp = id ? S.composer(document) : null;
-    if (composerEl && composerEl !== comp) composerEl.removeAttribute('data-ccc-composer');
+    if (composerEl !== comp) {
+      if (composerEl) composerEl.removeAttribute('data-ccc-composer');
+      // The message box grows (usually upward) as you type; keep the label glued to its top edge.
+      if (composerResize) {
+        composerResize.disconnect();
+        if (comp) composerResize.observe(comp);
+      }
+    }
     composerEl = comp;
     if (comp) setAttr(comp, 'data-ccc-composer', data.settings.composer ? '' : null);
 
@@ -525,6 +533,11 @@
     window.addEventListener('focus', tick);
     window.addEventListener('popstate', checkUrl);
     window.addEventListener('resize', positionPill);
+    // Typing: reposition right away and again once the editor has finished re-rendering.
+    document.addEventListener('input', () => {
+      positionPill();
+      setTimeout(positionPill, 0);
+    }, true);
     document.addEventListener('scroll', positionPill, true);
     if (globalThis.navigation && navigation.addEventListener) {
       navigation.addEventListener('navigatesuccess', () => setTimeout(checkUrl, 0));

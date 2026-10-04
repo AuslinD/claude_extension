@@ -38,6 +38,20 @@
     await sleep(1500);
     R.initial = snap();
 
+    // 0. Typing grows the message box upward without adding elements; the label must follow its top edge.
+    const editor = document.querySelector('.ProseMirror');
+    const pillOffset = () => {
+      const p = document.getElementById('ccc-pill').getBoundingClientRect();
+      return Math.round(p.top + p.height / 2 - fieldset.getBoundingClientRect().top);
+    };
+    R.pillBefore = { offset: pillOffset(), boxTop: Math.round(fieldset.getBoundingClientRect().top) };
+    editor.style.minHeight = '200px';
+    editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await sleep(300);
+    R.pillAfterGrow = { offset: pillOffset(), boxTop: Math.round(fieldset.getBoundingClientRect().top) };
+    editor.style.minHeight = '';
+    await sleep(300);
+
     // 1. Start a response in chat A
     let stop = stopButton();
     fieldset.appendChild(stop);
