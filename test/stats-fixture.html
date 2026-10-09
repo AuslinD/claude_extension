@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Claude time</title>
+  <link rel="stylesheet" href="../stats/stats.css">
+  <script>
+    // Fixed clock: Fri 9 Oct 2026, 3:00 pm local. Seeded segments (see test/stats.test.js for totals).
+    (function () {
+      const at = (d, h, m) => new Date(2026, 9, d, h, m).getTime();
+      const seg = (id, chatId, kind, d, h1, m1, h2, m2) => ({ id, chatId, kind, start: at(d, h1, m1), end: at(d, h2, m2) });
+      window.CCC_TEST = {
+        now: at(9, 15, 0),
+        seed: {
+          sync: { settings: { idleSeconds: 90 } },
+          local: {
+            titles: { c1: 'Linear algebra help', c2: 'OS lab' },
+            'time:2026-10-09': [
+              seg('a', 'c1', 'prompting', 9, 13, 0, 13, 10),
+              seg('b', 'c1', 'waiting', 9, 13, 10, 13, 15),
+              seg('c', 'c1', 'reading', 9, 13, 15, 13, 30),
+              seg('d', null, 'prompting', 9, 14, 0, 14, 2),
+              seg('e', 'c2', 'reading', 9, 14, 10, 14, 18),
+              seg('f', 'c2', 'idle', 9, 14, 18, 14, 38),
+            ],
+            'time:2026-10-07': [seg('g', 'c2', 'waiting', 7, 10, 0, 10, 30)],
+            'time:2026-10-01': [seg('h', 'c1', 'reading', 1, 9, 0, 10, 0)],
+          },
+        },
+      };
+      window.confirm = () => true;
+    })();
+  </script>
+</head>
+<body>
+  <main id="app"></main>
+  <script src="chrome-shim.js"></script>
+  <script src="../src/activity.js"></script>
+  <script src="../src/storage.js"></script>
+  <script src="../stats/stats.js"></script>
+  <script src="stats-run.js"></script>
+</body>
+</html>

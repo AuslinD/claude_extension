@@ -52,6 +52,13 @@
   background: var(--ccc-text, #fff);
   opacity: 0.85;
 }
+/* Time tracking paused: a small pause mark after the chat name. */
+#ccc-pill[data-ccc-paused]::after {
+  content: '\23F8\FE0E';
+  flex: none;
+  font-size: 10px;
+  opacity: 0.85;
+}
 #ccc-pill .ccc-label {
   overflow: hidden;
   white-space: nowrap;

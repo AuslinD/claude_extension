@@ -4,15 +4,21 @@
 //   local: "status:<chatId>" -> status entry, "projectMap" -> {chatId: projectId}, "titles" -> {chatId: title},
 //          "projectRank" -> {chatId: 0-based position in its project, newest first},
 //          "auto" -> {chats: {chatId: i}, projects: {projectId: i}, next: n}  (automatic color rotation)
+//          "pause" -> {since, until|null}  (time tracking paused on this device)
+//          "discard" -> {from, to}  (last discarded window; a signal to open tabs)
+//          "time:YYYY-MM-DD" -> [{id, chatId, kind, start, end}]  (time-tracking segments, see activity.js)
 (function (root) {
   'use strict';
 
-  const DEFAULT_SETTINGS = { topbar: true, composer: true, sidebar: true, tint: false, groupByProject: true };
+  const DEFAULT_SETTINGS = {
+    topbar: true, composer: true, sidebar: true, tint: false, groupByProject: true,
+    tracking: true, idleSeconds: 90,
+  };
 
   function emptyState() {
     return {
       colors: {}, projectColors: {}, settings: { ...DEFAULT_SETTINGS }, recent: [],
-      statuses: {}, projectMap: {}, titles: {}, projectRank: {}, auto: emptyAuto(),
+      statuses: {}, projectMap: {}, titles: {}, projectRank: {}, auto: emptyAuto(), pause: null,
     };
   }
 
@@ -38,6 +44,7 @@
       else if (key === 'titles') state.titles = { ...(value || {}) };
       else if (key === 'projectRank') state.projectRank = { ...(value || {}) };
       else if (key === 'auto') state.auto = { ...emptyAuto(), ...(value || {}) };
+      else if (key === 'pause') state.pause = value || null;
     }
     return state;
   }
@@ -133,6 +140,77 @@
     if (Object.keys(updates).length) await store().local.set(updates);
   }
 
+  // ---------- time tracking ----------
+
+  const Act = () => root.CCC.activity;
+  const isTimeKey = (k) => k.startsWith('time:');
+
+  // { "time:YYYY-MM-DD": [segments starting that local day] }
+  function segmentsByDayKey(segments) {
+    const out = {};
+    for (const s of segments) (out['time:' + Act().dayKey(s.start)] = out['time:' + Act().dayKey(s.start)] || []).push(s);
+    return out;
+  }
+
+  // Insert or update segments (matched by id). Reads and writes only the days involved.
+  async function saveSegments(segments) {
+    const groups = segmentsByDayKey(segments.filter((s) => s.end > s.start));
+    const keys = Object.keys(groups);
+    if (!keys.length) return;
+    const items = await store().local.get(keys);
+    const updates = {};
+    for (const k of keys) {
+      const next = Act().mergeSegments(items[k], groups[k]);
+      if (next) updates[k] = next;
+    }
+    if (Object.keys(updates).length) await store().local.set(updates);
+  }
+
+  // Segments from the local days overlapping [from, to] (or every stored day with { all: true }).
+  async function loadSegments(from, to, { all = false } = {}) {
+    let items;
+    if (all) {
+      const everything = await store().local.get(null);
+      items = Object.fromEntries(Object.entries(everything).filter(([k]) => isTimeKey(k)));
+    } else {
+      items = await store().local.get(Act().daysBetween(from, to).map((d) => 'time:' + d));
+    }
+    return Object.values(items).flat().sort((a, b) => a.start - b.start);
+  }
+
+  // Removes [from, to) from the stored timeline ("that wasn't me, don't count it").
+  async function discardTime(from, to) {
+    const keys = Act().daysBetween(from, to).map((d) => 'time:' + d);
+    const items = await store().local.get(keys);
+    const updates = {};
+    for (const [k, list] of Object.entries(items)) {
+      const next = Act().trimSegments(list, from, to);
+      if (next !== list) updates[k] = next;
+    }
+    // Tabs that are tracking right now hold an unsaved segment; this key tells them to cut it too.
+    await store().local.set({ ...updates, discard: { from, to } });
+  }
+
+  async function pruneTime(now) {
+    const stale = Act().staleDayKeys(Object.keys(await store().local.get(null)), now);
+    if (stale.length) await store().local.remove(stale);
+  }
+
+  async function clearTime() {
+    const keys = Object.keys(await store().local.get(null)).filter(isTimeKey);
+    if (keys.length) await store().local.remove(keys);
+  }
+
+  function setPause(pause) {
+    return pause ? store().local.set({ pause }) : store().local.remove('pause');
+  }
+
+  // Keyboard shortcut / one-click: resume if paused, otherwise pause until resumed.
+  async function togglePause(now) {
+    const { pause } = await store().local.get('pause');
+    return setPause(Act().isPaused(pause, now) ? null : { since: now, until: null });
+  }
+
   function onChanged(fn) {
     store().onChanged.addListener(fn);
   }
@@ -141,6 +219,7 @@
     DEFAULT_SETTINGS, emptyState, applyItem, fromItems, applyChanges, mergeMap, mergeAutoValues, withRecent,
     loadAll, setChatColor, clearChatColor, setProjectColor, clearProjectColor,
     saveSettings, setStatus, mergeLocalMap, mergeAuto, pushRecent, markAllSeen, onChanged,
+    segmentsByDayKey, saveSegments, loadSegments, discardTime, pruneTime, clearTime, setPause, togglePause,
   };
   root.CCC = root.CCC || {};
   root.CCC.storage = api;

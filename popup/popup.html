@@ -47,6 +47,11 @@
     .badge.run { border: 1.5px solid var(--muted); color: var(--muted); line-height: 15px; }
     .empty { color: var(--muted); }
     .hint { font-size: 11px; color: var(--muted); margin-top: 8px; }
+    .time-line { display: flex; align-items: baseline; gap: 8px; }
+    .time-total { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .time-now { font-size: 12px; color: var(--muted); }
+    .time-now.paused { color: var(--fg); }
+    .time-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; }
     footer { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px 12px; font-size: 11px; color: var(--muted); }
   </style>
 </head>
@@ -58,6 +63,11 @@
   <section id="activity-section" hidden>
     <h2><span>Activity</span><button class="link" id="mark-seen">Mark all as seen</button></h2>
     <ul id="activity"></ul>
+  </section>
+  <section id="time-section">
+    <h2><span>Time today</span><button class="link" id="time-open">View breakdown</button></h2>
+    <div class="time-line"><span class="time-total" id="time-total">0s</span><span class="time-now" id="time-now"></span></div>
+    <div class="time-actions" id="time-actions"></div>
   </section>
   <section>
     <h2>Show</h2>
@@ -77,6 +87,7 @@
     <button class="link" id="diag">Copy diagnostics</button>
   </footer>
   <script src="../src/colors.js"></script>
+  <script src="../src/activity.js"></script>
   <script src="../src/storage.js"></script>
   <script src="../src/palette-ui.js"></script>
   <script src="popup.js"></script>

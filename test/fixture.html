@@ -49,6 +49,10 @@
   <script>
     Object.assign(CCC.status.config, { HEARTBEAT_MS: 500, STALE_MS: 2000, POLL_MS: 1000, FALLBACK_MS: 5000 });
   </script>
+  <script src="../src/activity.js"></script>
+  <script>
+    Object.assign(CCC.activity.config, { FLUSH_MS: 500, TYPING_MS: 1500 });
+  </script>
   <script src="../src/storage.js"></script>
   <script src="../src/api.js"></script>
   <script src="../src/palette-ui.js"></script>

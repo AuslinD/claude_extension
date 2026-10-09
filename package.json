@@ -1,8 +1,8 @@
 {
   "name": "claude-chat-colors",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
-  "description": "Chrome extension: color-code claude.ai chats and see which ones are still running.",
+  "description": "Chrome extension: color-code claude.ai chats and see which ones are still running, and track time spent prompting / waiting / reading.",
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
     "package": "sh tools/package.sh",

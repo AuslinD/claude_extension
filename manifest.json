@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Claude Chat Colors",
-  "version": "1.1.0",
-  "description": "Color-code your claude.ai chats and see at a glance which chats are still running.",
+  "version": "1.2.0",
+  "description": "Color-code your claude.ai chats, see which chats are still running, and track your time prompting, waiting and reading.",
   "permissions": [
     "storage"
   ],
@@ -31,6 +31,7 @@
         "src/colors.js",
         "src/selectors.js",
         "src/status.js",
+        "src/activity.js",
         "src/storage.js",
         "src/api.js",
         "src/palette-ui.js",
@@ -41,5 +42,13 @@
       ],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "commands": {
+    "toggle-tracking-pause": {
+      "suggested_key": {
+        "default": "Alt+Shift+P"
+      },
+      "description": "Pause / resume time tracking"
+    }
+  }
 }

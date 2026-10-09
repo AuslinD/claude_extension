@@ -109,3 +109,80 @@ test('storage: recent colors are newest first, unique, capped at 10', () => {
   assert.equal(new Set(list).size, 10);
   assert.deepEqual(Store.withRecent(['#aaaaaa', '#bbbbbb'], '#BBBBBB'), ['#bbbbbb', '#aaaaaa']);
 });
+
+// ---------- time tracking storage ----------
+
+const Act = require('../src/activity.js');
+const { installFakeChrome } = require('./fake-chrome.js');
+const DAY1 = new Date(2026, 9, 9, 14, 0, 0).getTime();
+const DAY2 = new Date(2026, 9, 10, 9, 0, 0).getTime();
+const tseg = (id, start, secs, kind = 'reading') => ({ id, chatId: CHAT, kind, start, end: start + secs * 1000 });
+
+test('storage: tracking settings default on with a 90 s idle timeout', () => {
+  const s = Store.fromItems({}, {});
+  assert.equal(s.settings.tracking, true);
+  assert.equal(s.settings.idleSeconds, 90);
+  assert.equal(s.pause, null);
+});
+
+test('storage: pause state comes from local storage and follows changes', () => {
+  const s = Store.fromItems({}, { pause: { since: 1, until: null } });
+  assert.deepEqual(s.pause, { since: 1, until: null });
+  Store.applyChanges(s, 'local', { pause: { oldValue: s.pause } });
+  assert.equal(s.pause, null);
+  Store.applyChanges(s, 'local', { ['time:2026-10-09']: { newValue: [] } });
+  assert.equal('time:2026-10-09' in s, false, 'time data is not kept in page state');
+});
+
+test('storage: segmentsByDayKey groups by the local day a segment starts', () => {
+  const g = Store.segmentsByDayKey([tseg('a', DAY1, 5), tseg('b', DAY2, 5), tseg('c', DAY1 + 9000, 5)]);
+  assert.deepEqual(Object.keys(g).sort(), ['time:2026-10-09', 'time:2026-10-10']);
+  assert.deepEqual(g['time:2026-10-09'].map((s) => s.id), ['a', 'c']);
+});
+
+test('storage: saveSegments upserts into per-day keys', async () => {
+  const chrome = installFakeChrome();
+  await Store.saveSegments([tseg('a', DAY1, 5)]);
+  await Store.saveSegments([tseg('a', DAY1, 9), tseg('b', DAY2, 3)]);
+  assert.deepEqual(chrome.storage.local._data['time:2026-10-09'], [tseg('a', DAY1, 9)]);
+  assert.deepEqual(chrome.storage.local._data['time:2026-10-10'], [tseg('b', DAY2, 3)]);
+});
+
+test('storage: loadSegments reads only the days in the range', async () => {
+  installFakeChrome({ local: {
+    'time:2026-10-09': [tseg('a', DAY1, 5)],
+    'time:2026-10-10': [tseg('b', DAY2, 5)],
+  } });
+  const segs = await Store.loadSegments(Act.dayStart(DAY2), DAY2 + 60000);
+  assert.deepEqual(segs.map((s) => s.id), ['b']);
+  assert.equal((await Store.loadSegments(0, DAY2 + 60000, { all: true })).length, 2, 'all: every stored day');
+});
+
+test('storage: discardTime cuts a window out of the stored timeline', async () => {
+  const chrome = installFakeChrome({ local: { 'time:2026-10-09': [tseg('a', DAY1, 600)] } });
+  await Store.discardTime(DAY1 + 300000, DAY1 + 600000);
+  assert.deepEqual(chrome.storage.local._data['time:2026-10-09'], [tseg('a', DAY1, 300)]);
+  assert.deepEqual(chrome.storage.local._data.discard, { from: DAY1 + 300000, to: DAY1 + 600000 },
+    'open tabs are told, so they cut their unsaved segment too');
+});
+
+test('storage: pruneTime drops days past the retention window; clearTime removes all', async () => {
+  const chrome = installFakeChrome({ local: { 'time:2026-10-09': [], 'time:2026-01-01': [], titles: {} } });
+  await Store.pruneTime(DAY1);
+  assert.deepEqual(Object.keys(chrome.storage.local._data).sort(), ['time:2026-10-09', 'titles']);
+  await Store.clearTime();
+  assert.deepEqual(Object.keys(chrome.storage.local._data), ['titles']);
+});
+
+test('storage: setPause / togglePause', async () => {
+  const chrome = installFakeChrome();
+  await Store.setPause({ since: DAY1, until: DAY1 + 900000 });
+  assert.deepEqual(chrome.storage.local._data.pause, { since: DAY1, until: DAY1 + 900000 });
+  await Store.togglePause(DAY1 + 1000);
+  assert.equal('pause' in chrome.storage.local._data, false, 'active pause -> resumed');
+  await Store.togglePause(DAY1 + 2000);
+  assert.deepEqual(chrome.storage.local._data.pause, { since: DAY1 + 2000, until: null });
+  await Store.setPause({ since: DAY1, until: DAY1 + 1 });
+  await Store.togglePause(DAY1 + 5000);
+  assert.deepEqual(chrome.storage.local._data.pause, { since: DAY1 + 5000, until: null }, 'expired pause -> pause again');
+});

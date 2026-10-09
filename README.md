@@ -1,6 +1,6 @@
 # Claude Chat Colors
 
-A Chrome extension for **claude.ai** that gives every chat its own color, so you always know which chat you're typing into. It also shows in the sidebar which chats are still answering and which finished while you were away.
+A Chrome extension for **claude.ai** that gives every chat its own color, so you always know which chat you're typing into. It also shows in the sidebar which chats are still answering and which finished while you were away, and it tracks how your time splits between **prompting**, **waiting** for Claude, and **reading**.
 
 | Light | Dark |
 |---|---|
@@ -45,11 +45,18 @@ Optional: pin the extension. Click the puzzle-piece icon → 📌.
 - The toolbar icon shows a **green number** for finished-but-unopened chats, or a gray number for running ones.
 - The popup lists them all, so you can click straight to each one. "Mark all as seen" clears the list.
 
+**Time tracking**
+- Counts time spent **prompting** (typing in the message box), **waiting** (Claude is generating) and **reading** (on the chat, using the mouse, scrolling or the keyboard).
+- Only counts while a claude.ai tab is in front and the window is focused. After 90 s with no input the time counts as **idle** and is left out. You can change the timeout.
+- Nothing shows on claude.ai itself. The popup has one line ("Time today: 42m · reading now"). **View breakdown** opens a page with the split, a chart by hour or by day, and tables by activity and by chat.
+- **Pause** from the popup (until resumed, 15 min, or 1 h) or with **Alt+Shift+P**. While paused, a small ⏸ shows after the chat name above the message box. **Discard last 10 min** removes time that shouldn't have counted.
+- Details: [docs/TIME_TRACKING.md](docs/TIME_TRACKING.md).
+
 **Settings (in the popup):** turn the top bar, message-box glow, sidebar colors, faint page tint, and project grouping on or off.
 
 ## Privacy
 - Everything stays in your browser.
-- Colors sync through your Chrome profile (`chrome.storage.sync`). Running/done state stays on this device.
+- Colors sync through your Chrome profile (`chrome.storage.sync`). Running/done state and tracked time stay on this device. Tracked time is only timestamps, chat ids and activity type, never message text. It's deleted after 60 days, or any time from the breakdown page.
 - The extension only talks to claude.ai itself. It uses your existing login to read chat names and project membership, and to check whether a chat you left has finished.
 - It has no servers, no analytics, and asks for no permissions beyond `storage`.
 
@@ -75,7 +82,7 @@ The diagnostics show what the extension could and couldn't find on the page, lik
 No dependencies, no build step: the folder *is* the extension.
 
 ```sh
-npm test            # unit tests + a headless-Chrome run of test/fixture.html (Node 21+)
+npm test            # unit tests + headless-Chrome runs of the test pages (Node 21+), see docs/TESTING.md
 npm run package     # dist/claude-chat-colors-<version>.zip
 npm run icons       # regenerate icons/
 ```
@@ -84,14 +91,17 @@ npm run icons       # regenerate icons/
 |---|---|
 | `src/colors.js` | Palette, color names, automatic rotation, project fading, contrast (pure, tested) |
 | `src/status.js` | Running → done state machine (pure, tested) |
+| `src/activity.js` | Time tracking: prompting / waiting / reading / idle, segments, totals (pure, tested) |
 | `src/selectors.js` | All claude.ai page assumptions |
 | `src/api.js` | Reads chat list / conversation from claude.ai's own web API (best effort) |
 | `src/storage.js` | `chrome.storage` layout |
-| `src/content.js` | Runs on claude.ai: painting, picker, status tracking |
+| `src/content.js` | Runs on claude.ai: painting, picker, status tracking, time tracking |
 | `src/palette-ui.js` | The color grid used by the picker and the popup |
-| `src/background.js` | Toolbar badge count |
+| `src/background.js` | Toolbar badge count, Alt+Shift+P pause shortcut |
 | `popup/` | Toolbar popup |
+| `stats/` | Time breakdown page |
 | `test/fixture.html` | Fake claude.ai page. Open it in Chrome to watch the scripted scenario run. |
+| `docs/` | [TESTING.md](docs/TESTING.md) (what each test covers, how to add one), [TIME_TRACKING.md](docs/TIME_TRACKING.md), [PLAN.md](docs/PLAN.md) |
 
 **Releasing:**
 1. Bump `version` in both `manifest.json` and `package.json`.

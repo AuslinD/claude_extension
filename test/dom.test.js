@@ -1,55 +1,15 @@
-// Runs test/fixture.html in headless Chrome (virtual time, so ~20s of scenario runs instantly)
+// Runs test/fixture.html in headless Chrome (virtual time, so ~45s of scenario runs in a few seconds)
 // and checks the snapshots it produces. Skipped when Chrome isn't installed.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const { spawn } = require('child_process');
-const { pathToFileURL } = require('url');
 const Colors = require('../src/colors.js');
+const { CHROME, runPage } = require('./headless.js');
 
-const CHROME = [
-  process.env.CHROME_PATH,
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/usr/bin/google-chrome',
-  '/usr/bin/chromium',
-].find((p) => p && fs.existsSync(p));
-
-// Chrome dumps the DOM once the virtual-time budget is spent but may not exit while timers
-// are still scheduled, so read stdout until </html> and then kill it.
-function runFixture() {
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ccc-chrome-'));
-  const child = spawn(CHROME, [
-    '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-    '--user-data-dir=' + profile, '--allow-file-access-from-files',
-    ...(process.platform === 'linux' ? ['--no-sandbox'] : []), // GitHub Actions runners
-    '--virtual-time-budget=40000', '--dump-dom',
-    pathToFileURL(path.join(__dirname, 'fixture.html')).href,
-  ], { stdio: ['ignore', 'pipe', 'ignore'] });
-  child.on('exit', () => {
-    try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5 }); } catch (e) { /* temp dir */ }
-  });
-  const cleanup = () => child.kill('SIGKILL');
-  return new Promise((resolve, reject) => {
-    let html = '';
-    const timer = setTimeout(() => { cleanup(); reject(new Error('headless Chrome timed out')); }, 90000);
-    child.stdout.on('data', (d) => {
-      html += d;
-      if (!html.includes('</html>')) return;
-      clearTimeout(timer);
-      cleanup();
-      const m = /<pre id="results">([\s\S]*?)<\/pre>/.exec(html);
-      if (!m) return reject(new Error('fixture produced no results block'));
-      const text = m[1].replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-      resolve(JSON.parse(text));
-    });
-    child.on('error', (e) => { clearTimeout(timer); cleanup(); reject(e); });
-  });
-}
+const runFixture = () => runPage('fixture.html', 70000);
 
 test('fixture scenario in headless Chrome', { skip: !CHROME && 'Chrome not found' }, async () => {
   const R = await runFixture();
+  if (process.env.DEBUG_FIXTURE) console.log(JSON.stringify(R, null, 1)); // DEBUG_FIXTURE=1 npm test
   assert.equal(R.error, undefined, R.error);
 
   // Initial paint
@@ -108,4 +68,26 @@ test('fixture scenario in headless Chrome', { skip: !CHROME && 'Chrome not found
   assert.equal(R.sidebarOff.links.A.color, null);
   assert.equal(R.sidebarOff.links.A.status, null);
   assert.ok(R.sidebarOff.topbar, 'top bar unaffected by sidebar toggle');
+
+  // Time tracking (fixture: typing grace 1.5 s; idle timeout set to 2 s in the idle phase)
+  const T = R.time;
+  const near = (ms, lo, hi, what) => assert.ok(ms >= lo && ms <= hi, `${what}: ${ms} ms not in [${lo}, ${hi}]`);
+  near(T.typing.prompting, 1500, 3500, 'typing counts as prompting');
+  near(T.typing.waiting + T.typing.idle, 0, 0, 'typing: nothing else');
+  near(T.waiting.waiting, 2000, 3000, 'Claude generating counts as waiting');
+  near(T.waiting.prompting, 0, 0, 'keystrokes that sent the prompt are not counted as prompting while waiting');
+  near(T.reading.reading, 1500, 3500, 'scrolling around counts as reading');
+  near(T.reading.prompting + T.reading.waiting + T.reading.idle, 0, 0, 'reading: nothing else');
+  near(T.idle.idle, 2000, 5000, 'no input for the idle timeout -> idle');
+  near(T.idle.reading, 0, 2500, 'reading stops after the idle timeout');
+  for (const k of ['prompting', 'waiting', 'reading', 'idle']) {
+    assert.equal(T.away[k], 0, `away: no ${k} counted while the window is unfocused`);
+    assert.equal(T.paused[k], 0, `paused: no ${k} counted`);
+  }
+  assert.ok(T.pillPaused, 'label shows the paused marker');
+  assert.ok(T.resumed.reading >= 2000, 'counting resumes after unpausing');
+  assert.equal(T.pillPausedAfterResume, false);
+  assert.ok(T.discardRightAfter.reading < T.discardBefore.reading, 'discard removed the last few seconds of reading');
+  assert.equal(T.discardRightAfter.prompting, T.discardBefore.prompting, 'older time is kept');
+  assert.deepEqual(T.discardLater, T.discardRightAfter, 'the open tab does not re-save discarded time');
 });

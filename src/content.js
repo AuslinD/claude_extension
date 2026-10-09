@@ -1,10 +1,11 @@
-// Wires everything together on claude.ai: painting, status tracking, project detection, inline picker.
+// Wires everything together on claude.ai: painting, status tracking, project detection, inline picker,
+// time tracking.
 (() => {
   'use strict';
   if (globalThis.__cccLoaded) return;
   globalThis.__cccLoaded = true;
 
-  const { colors: Colors, selectors: S, status: St, storage: Store, api: Api } = globalThis.CCC;
+  const { colors: Colors, selectors: S, status: St, storage: Store, api: Api, activity: Act } = globalThis.CCC;
   const TEST = globalThis.CCC_TEST || null;
   const OWNER = (globalThis.crypto && crypto.randomUUID && crypto.randomUUID()) || String(Math.random()).slice(2);
   const TICK_MS = 1000;
@@ -153,6 +154,11 @@
     }
     pill.hidden = !id;
     if (!id) return;
+    const paused = trackingPaused();
+    setAttr(pill, 'data-ccc-paused', paused ? '' : null);
+    pill.title = paused
+      ? 'This chat’s color — click to change. Time tracking is paused (resume from the toolbar popup or Alt+Shift+P).'
+      : 'This chat’s color — click to change';
     const label = pill.querySelector('.ccc-label');
     const title = currentTitle();
     if (label.textContent !== title) label.textContent = title;
@@ -387,6 +393,65 @@
     }
   }
 
+  // ---------- time tracking ----------
+
+  let tracker = Act.newTracker();
+  let typedAt = null;
+  let inputAt = now(); // opening / reloading the page counts as activity
+  let unsavedClosed = [];
+  let lastFlush = 0;
+  let pausedShown = false;
+
+  const trackingPaused = () => !!data.settings.tracking && Act.isPaused(data.pause, now());
+
+  function onUserInput() {
+    inputAt = now();
+  }
+
+  function onInputEvent(e) {
+    inputAt = now();
+    const box = composerEl || S.composer(document);
+    if (box && e.target && box.contains(e.target)) typedAt = inputAt;
+  }
+
+  function trackTime() {
+    const t = now();
+    const paused = Act.isPaused(data.pause, t);
+    const r = Act.step(tracker, {
+      now: t,
+      owner: OWNER,
+      chatId: current.chatId,
+      viewing: !!data.settings.tracking && isViewing(),
+      paused,
+      streaming: S.isStreaming(document),
+      typedAt,
+      inputAt,
+      idleMs: (data.settings.idleSeconds || 90) * 1000,
+    });
+    tracker = r.tracker;
+    unsavedClosed.push(...r.closed);
+    if (r.closed.length || t - lastFlush >= Act.config.FLUSH_MS) flushTime();
+    if (trackingPaused() !== pausedShown) { // a timed pause ran out, or pause was toggled
+      pausedShown = trackingPaused();
+      schedulePaint();
+    }
+  }
+
+  function flushTime() {
+    lastFlush = now();
+    const segs = unsavedClosed.concat(tracker.open ? [tracker.open] : []);
+    unsavedClosed = [];
+    if (segs.length) safe(Store.saveSegments(segs));
+  }
+
+  // Another page discarded a time window: cut our unsaved segment the same way so it isn't re-saved.
+  function applyDiscard({ from, to }) {
+    const r = Act.discardFromTracker(tracker, from, to);
+    tracker = r.tracker;
+    unsavedClosed = Act.trimSegments(unsavedClosed, from, to).concat(r.pieces);
+    flushTime();
+  }
+
   // ---------- project detection ----------
 
   function detectProjectsFromDom() {
@@ -461,6 +526,7 @@
       checkStreaming();
       checkStale();
       detectProjectsFromDom();
+      trackTime();
     } catch (e) {
       if (!alive()) teardown();
     }
@@ -475,7 +541,7 @@
   function onMessage(msg, _sender, sendResponse) {
     if (!msg || msg.type !== 'ccc:getInfo') return false;
     const id = current.chatId;
-    const res = { chatId: id, diagnostics: diagnostics() };
+    const res = { chatId: id, diagnostics: diagnostics(), activity: (tracker.counting && tracker.open && tracker.open.kind) || null };
     if (id) {
       const info = colorInfo(id);
       const projectId = projectOf(id);
@@ -509,6 +575,7 @@
       knownProjectChats: Object.values(data.projectMap).filter(Boolean).length,
       apiChatList: Api.stats.list,
       apiConversation: Api.stats.conversation,
+      timeTracking: !data.settings.tracking ? 'off' : trackingPaused() ? 'paused' : (tracker.counting && tracker.open && tracker.open.kind) || 'not counting',
       pageBackground: pageBg,
       browser: navigator.userAgent.replace(/^.*(Chrome\/[\d.]+).*$/, '$1'),
     };
@@ -518,6 +585,9 @@
     data = loaded;
     Store.onChanged((changes, area) => {
       Store.applyChanges(data, area, changes);
+      if (area === 'local' && changes.discard && changes.discard.newValue) applyDiscard(changes.discard.newValue);
+      // Our own time flushes land here too; they don't change anything on the page.
+      if (area === 'local' && Object.keys(changes).every((k) => k.startsWith('time:'))) return;
       schedulePaint();
     });
     if (chrome.runtime && chrome.runtime.onMessage) chrome.runtime.onMessage.addListener(onMessage);
@@ -539,6 +609,13 @@
       setTimeout(positionPill, 0);
     }, true);
     document.addEventListener('scroll', positionPill, true);
+    // Signs that you're actually at the screen (time tracking idle detection). Not 'scroll': claude.ai
+    // auto-scrolls while a reply streams; your own scrolling shows up as wheel / touch / keys / mousedown.
+    for (const type of ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart']) {
+      document.addEventListener(type, onUserInput, { capture: true, passive: true });
+    }
+    document.addEventListener('input', onInputEvent, true);
+    window.addEventListener('pagehide', flushTime);
     if (globalThis.navigation && navigation.addEventListener) {
       navigation.addEventListener('navigatesuccess', () => setTimeout(checkUrl, 0));
     }
@@ -546,6 +623,7 @@
     timers.push(setInterval(tick, TICK_MS));
     timers.push(setInterval(() => safe(refreshConversationList()), LIST_REFRESH_MS));
     setTimeout(() => safe(refreshConversationList()), 1500);
+    safe(Store.pruneTime(now()));
     tick();
     paint();
   }

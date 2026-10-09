@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const { colors: Colors, storage: Store, paletteUI } = globalThis.CCC;
+  const { colors: Colors, storage: Store, paletteUI, activity: Act } = globalThis.CCC;
   const $ = (s) => document.querySelector(s);
   let target = null; // 'chat' | 'project' for the current chat's picker
   let lastInfo = null;
@@ -124,6 +124,61 @@
     return Math.round(s / 86400) + 'd ago';
   }
 
+  // ---------- time tracking ----------
+
+  const NOW_TEXT = { prompting: 'prompting now', waiting: 'waiting on Claude now', reading: 'reading now', idle: 'idle (not counting)' };
+
+  let discardedAt = 0; // keeps the "Discarded ✓" confirmation through re-renders
+
+  async function renderTime() {
+    const now = Date.now();
+    const [{ settings }, { pause }, segs] = await Promise.all([
+      chrome.storage.sync.get('settings'),
+      chrome.storage.local.get('pause'),
+      Store.loadSegments(Act.dayStart(now), now),
+    ]);
+    const tracking = { ...Store.DEFAULT_SETTINGS, ...(settings || {}) }.tracking;
+    const paused = Act.isPaused(pause, now);
+    $('#time-total').textContent = Act.formatDuration(Act.summarize(segs, { from: Act.dayStart(now), to: now }).total);
+
+    const status = $('#time-now');
+    status.className = 'time-now' + (paused ? ' paused' : '');
+    if (!tracking) status.textContent = 'tracking is off';
+    else if (paused) status.textContent = pause.until ? '⏸ paused until ' + clock(pause.until) : '⏸ paused';
+    else status.textContent = (lastInfo && NOW_TEXT[lastInfo.activity]) || '';
+
+    const actions = $('#time-actions');
+    actions.replaceChildren();
+    const link = (text, title, onclick) => el('button', { className: 'link', textContent: text, title, onclick });
+    if (!tracking) {
+      actions.append(link('Turn on', 'Start tracking time again', () => Store.saveSettings({ tracking: true })));
+      return;
+    }
+    if (paused) {
+      actions.append(link('Resume', 'Start counting again', () => Store.setPause(null)));
+    } else {
+      actions.append(
+        link('Pause', 'Stop counting until you resume (Alt+Shift+P)', () => Store.setPause({ since: Date.now(), until: null })),
+        link('Pause 15 min', 'Stop counting for 15 minutes', () => Store.setPause({ since: Date.now(), until: Date.now() + 15 * 60000 })),
+        link('Pause 1 h', 'Stop counting for an hour', () => Store.setPause({ since: Date.now(), until: Date.now() + 3600000 })),
+      );
+    }
+    const recent = Date.now() - discardedAt < 4000;
+    actions.append(link(recent ? 'Discarded ✓' : 'Discard last 10 min', 'That wasn’t me: remove the last 10 minutes of tracked time', async () => {
+      discardedAt = Date.now();
+      await Store.discardTime(discardedAt - 10 * 60000, discardedAt);
+    }));
+  }
+
+  function clock(t) {
+    return new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
+  $('#time-open').addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('stats/stats.html') });
+    window.close();
+  });
+
   // ---------- settings ----------
 
   async function renderSettings() {
@@ -188,7 +243,7 @@
   function renderAll() {
     clearTimeout(pending);
     pending = setTimeout(() => {
-      renderCurrent();
+      renderCurrent().then(renderTime);
       renderActivity();
       renderSettings();
       renderCustom();
@@ -200,6 +255,7 @@
   chrome.storage.onChanged.addListener((changes, area) => {
     const keys = Object.keys(changes);
     if (area === 'local' && keys.every((k) => k.startsWith('status:') || k === 'auto')) renderActivity();
+    else if (area === 'local' && keys.every((k) => k.startsWith('time:') || k === 'pause' || k === 'discard')) renderTime();
     else renderAll();
   });
   renderAll();

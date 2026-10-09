@@ -123,6 +123,69 @@
     await chrome.storage.sync.set({ settings: { sidebar: false } });
     await sleep(800);
     R.sidebarOff = snap();
+
+    // 10. Time tracking. Each phase is measured as the change in stored totals (segments are
+    //     flushed every 500 ms in the fixture).
+    const kinds = async () => {
+      const segs = await CCC.storage.loadSegments(0, Date.now(), { all: true });
+      return CCC.activity.summarize(segs).kinds;
+    };
+    const poke = () => document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+    const type = () => editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const diff = (a, b) => Object.fromEntries(Object.keys(b).map((k) => [k, b[k] - a[k]]));
+    const T = (R.time = {});
+    poke();
+    await sleep(1000);
+    let k = await kinds();
+
+    for (let i = 0; i < 6; i++) { type(); await sleep(300); } // typing in the message box
+    await sleep(700);
+    let k2 = await kinds(); T.typing = diff(k, k2); k = k2;
+
+    stop = stopButton(); // Claude answers; you just watch
+    fieldset.appendChild(stop);
+    await sleep(2500);
+    stop.remove();
+    await sleep(700);
+    k2 = await kinds(); T.waiting = diff(k, k2); k = k2;
+
+    for (let i = 0; i < 7; i++) { poke(); await sleep(300); } // scrolling through the answer
+    await sleep(600);
+    k2 = await kinds(); T.reading = diff(k, k2); k = k2;
+
+    await chrome.storage.sync.set({ settings: { sidebar: false, idleSeconds: 2 } }); // no input for 2 s -> idle
+    await sleep(5000);
+    k2 = await kinds(); T.idle = diff(k, k2); k = k2;
+
+    CCC_TEST.viewing = false; // other window: input here doesn't count
+    poke(); type();
+    await sleep(2000);
+    k2 = await kinds(); T.away = diff(k, k2); k = k2;
+
+    await chrome.storage.local.set({ pause: { since: Date.now(), until: null } });
+    await sleep(100);
+    CCC_TEST.viewing = true;
+    for (let i = 0; i < 5; i++) { poke(); await sleep(300); }
+    await sleep(600);
+    k2 = await kinds(); T.paused = diff(k, k2); k = k2;
+    T.pillPaused = document.getElementById('ccc-pill').hasAttribute('data-ccc-paused');
+
+    await chrome.storage.local.remove('pause');
+    for (let i = 0; i < 10; i++) { poke(); await sleep(300); }
+    await sleep(600);
+    k2 = await kinds(); T.resumed = diff(k, k2); k = k2;
+    T.pillPausedAfterResume = document.getElementById('ccc-pill').hasAttribute('data-ccc-paused');
+
+    // "Discard last N" while this tab has an unsaved open segment: it must not come back.
+    for (let i = 0; i < 4; i++) { poke(); await sleep(300); }
+    await CCC.storage.discardTime(Date.now() - 4000, Date.now());
+    CCC_TEST.viewing = false; // stop counting so only a resurrected segment could change the totals
+    await sleep(100);
+    T.discardBefore = k;
+    T.discardRightAfter = await kinds();
+    await sleep(1500);
+    T.discardLater = await kinds();
+    CCC_TEST.viewing = true;
   } catch (e) {
     R.error = String((e && e.stack) || e);
   }
