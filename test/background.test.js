@@ -21,6 +21,13 @@ test('background: badge counts finished-unseen chats first, then running ones', 
   assert.match(chrome.action._badge.title, /1 finished.*1 still running/);
 });
 
+test('background: unread subagent summaries count toward the green badge', async () => {
+  const chrome = loadWorker({ local: { 'status:a': { state: 'done', unseen: true }, inbox: { t1: { unread: true }, t2: { unread: false } } } });
+  await chrome.runtime.onStartup._fire();
+  assert.equal(chrome.action._badge.text, '2');
+  assert.match(chrome.action._badge.title, /1 new in subagent inbox/);
+});
+
 test('background: Alt+Shift+P command toggles the time-tracking pause', async () => {
   const chrome = loadWorker();
   await chrome.commands.onCommand._fire('toggle-tracking-pause');

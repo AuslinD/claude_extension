@@ -69,6 +69,10 @@ test('fixture scenario in headless Chrome', { skip: !CHROME && 'Chrome not found
   assert.equal(R.sidebarOff.links.A.status, null);
   assert.ok(R.sidebarOff.topbar, 'top bar unaffected by sidebar toggle');
 
+  // Subagent inbox
+  assert.match(R.toast || '', /Subagent finished.*Research flights.*Alpha chat/, 'toast announces the finished subagent');
+  assert.deepEqual(R.inboxUnread, { A: true, B: false }, 'entries for the chat you are viewing are marked read');
+
   // Time tracking (fixture: typing grace 1.5 s; idle timeout set to 2 s in the idle phase)
   const T = R.time;
   const near = (ms, lo, hi, what) => assert.ok(ms >= lo && ms <= hi, `${what}: ${ms} ms not in [${lo}, ${hi}]`);

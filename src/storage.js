@@ -7,6 +7,7 @@
 //          "pause" -> {since, until|null}  (time tracking paused on this device)
 //          "discard" -> {from, to}  (last discarded window; a signal to open tabs)
 //          "time:YYYY-MM-DD" -> [{id, chatId, kind, start, end}]  (time-tracking segments, see activity.js)
+//          "projectNames" -> {projectId: name}, "inbox" -> {toolUseId: entry}  (see inbox.js)
 (function (root) {
   'use strict';
 
@@ -19,6 +20,7 @@
     return {
       colors: {}, projectColors: {}, settings: { ...DEFAULT_SETTINGS }, recent: [],
       statuses: {}, projectMap: {}, titles: {}, projectRank: {}, auto: emptyAuto(), pause: null,
+      projectNames: {}, inbox: {},
     };
   }
 
@@ -45,6 +47,8 @@
       else if (key === 'projectRank') state.projectRank = { ...(value || {}) };
       else if (key === 'auto') state.auto = { ...emptyAuto(), ...(value || {}) };
       else if (key === 'pause') state.pause = value || null;
+      else if (key === 'projectNames') state.projectNames = { ...(value || {}) };
+      else if (key === 'inbox') state.inbox = { ...(value || {}) };
     }
     return state;
   }
@@ -100,6 +104,14 @@
   async function mergeLocalMap(key, updates) {
     const items = await store().local.get(key);
     const next = mergeMap(items[key], updates);
+    if (next) await store().local.set({ [key]: next });
+    return !!next;
+  }
+
+  // Read-modify-write of one local key; fn returns the new value, or null to leave it alone.
+  async function updateLocal(key, fn) {
+    const items = await store().local.get(key);
+    const next = fn(items[key]);
     if (next) await store().local.set({ [key]: next });
     return !!next;
   }
@@ -218,7 +230,7 @@
   const api = {
     DEFAULT_SETTINGS, emptyState, applyItem, fromItems, applyChanges, mergeMap, mergeAutoValues, withRecent,
     loadAll, setChatColor, clearChatColor, setProjectColor, clearProjectColor,
-    saveSettings, setStatus, mergeLocalMap, mergeAuto, pushRecent, markAllSeen, onChanged,
+    saveSettings, setStatus, mergeLocalMap, updateLocal, mergeAuto, pushRecent, markAllSeen, onChanged,
     segmentsByDayKey, saveSegments, loadSegments, discardTime, pruneTime, clearTime, setPause, togglePause,
   };
   root.CCC = root.CCC || {};

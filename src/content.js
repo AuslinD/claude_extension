@@ -5,12 +5,14 @@
   if (globalThis.__cccLoaded) return;
   globalThis.__cccLoaded = true;
 
-  const { colors: Colors, selectors: S, status: St, storage: Store, api: Api, activity: Act } = globalThis.CCC;
+  const { colors: Colors, selectors: S, status: St, storage: Store, api: Api, activity: Act, inbox: Inbox } = globalThis.CCC;
   const TEST = globalThis.CCC_TEST || null;
   const OWNER = (globalThis.crypto && crypto.randomUUID && crypto.randomUUID()) || String(Math.random()).slice(2);
   const TICK_MS = 1000;
   const LIST_REFRESH_MS = 10 * 60 * 1000;
   const PAINT_THROTTLE_MS = 150;
+  const SUBAGENT_CHECK_MS = 8000;
+  const TOAST_MS = 8000;
 
   let data = Store.emptyState();
   let current = { path: null, chatId: null };
@@ -22,6 +24,8 @@
   let timers = [];
   let observer = null;
   const polling = new Set();
+  const subagentFetching = new Set();
+  const lastSubagentCheck = {};
 
   const now = () => Date.now();
   const alive = () => !!(globalThis.chrome && chrome.runtime && chrome.runtime.id);
@@ -111,6 +115,7 @@
     paintTimer = null;
     lastPaint = now();
     if (!document.body) return;
+    checkUrl(); // a title change can arrive before the next tick notices the new URL
     readPageBackground();
     const id = current.chatId;
     const rootEl = document.documentElement;
@@ -370,6 +375,8 @@
     const prev = data.statuses[id];
     const next = St.observeLocal(prev, { streaming: S.isStreaming(document), now: now(), viewing: isViewing(), owner: OWNER });
     if (next !== (prev || null)) writeStatus(id, next);
+    if (next && next.state === 'running' && next.owner === OWNER) checkSubagents(id);
+    else if (prev && prev.state === 'running' && next && next.state === 'done') setTimeout(() => checkSubagents(id, true), 1500);
   }
 
   function checkStale() {
@@ -387,10 +394,64 @@
           const cur = data.statuses[id];
           const n = St.applyPoll(cur, summary, now());
           if (cur && n !== cur) writeStatus(id, n);
+          recordSubagents(id, summary);
         })
         .catch(() => {})
         .finally(() => polling.delete(id));
     }
+  }
+
+  // ---------- subagent inbox ----------
+
+  function recordSubagents(id, summary) {
+    if (!summary || !summary.subagents || !summary.subagents.some((s) => s.done)) return;
+    const ctx = { chatId: id, projectId: data.projectMap[id] || null, now: now() };
+    safe(Store.updateLocal('inbox', (inbox) => Inbox.add(inbox, summary.subagents, ctx)));
+  }
+
+  // While this tab streams a reply, check now and then for subagents that finished inside it.
+  function checkSubagents(id, force) {
+    if (subagentFetching.has(id) || (!force && now() - (lastSubagentCheck[id] || 0) < SUBAGENT_CHECK_MS)) return;
+    lastSubagentCheck[id] = now();
+    subagentFetching.add(id);
+    Api.fetchConversationSummary(id)
+      .then((summary) => recordSubagents(id, summary))
+      .catch(() => {})
+      .finally(() => subagentFetching.delete(id));
+  }
+
+  // Looking at a chat counts as reading its inbox entries, like the "✓ Done" marker.
+  function markViewedInboxRead() {
+    const id = current.chatId;
+    if (!id || !isViewing() || !Object.values(data.inbox).some((e) => e && e.unread && e.chatId === id)) return;
+    safe(Store.updateLocal('inbox', (inbox) => Inbox.markRead(inbox, (e) => e.chatId === id)));
+  }
+
+  let toastTimer = null;
+  function showToast(ids, inbox) {
+    if (document.hidden || !ids.length) return;
+    const e = inbox[ids[ids.length - 1]];
+    const el = ensureEl('ccc-toast');
+    el.replaceChildren();
+    const head = document.createElement('div');
+    head.className = 'ccc-toast-head';
+    head.textContent = (e.isError ? 'Subagent failed' : 'Subagent finished') + (ids.length > 1 ? ` (+${ids.length - 1} more)` : '');
+    const task = document.createElement('div');
+    task.className = 'ccc-toast-task';
+    task.textContent = e.task || e.name;
+    const where = document.createElement('div');
+    where.className = 'ccc-toast-where';
+    where.textContent = data.titles[e.chatId] || 'Chat ' + e.chatId.slice(0, 8);
+    el.append(head, task, where);
+    el.title = e.summary || 'Open this chat';
+    el.style.setProperty('--ccc-c', colorInfo(e.chatId).color);
+    el.hidden = false;
+    el.onclick = () => {
+      el.hidden = true;
+      if (e.chatId !== current.chatId) location.assign('/chat/' + e.chatId);
+    };
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.hidden = true; }, TOAST_MS);
   }
 
   // ---------- time tracking ----------
@@ -506,6 +567,7 @@
     await Store.mergeLocalMap('projectMap', list.projectMap);
     await Store.mergeLocalMap('projectRank', ranks);
     await Store.mergeLocalMap('titles', list.titles);
+    await Store.mergeLocalMap('projectNames', list.projectNames);
   }
 
   // ---------- navigation + lifecycle ----------
@@ -526,6 +588,7 @@
       checkStreaming();
       checkStale();
       detectProjectsFromDom();
+      markViewedInboxRead();
       trackTime();
     } catch (e) {
       if (!alive()) teardown();
@@ -575,6 +638,7 @@
       knownProjectChats: Object.values(data.projectMap).filter(Boolean).length,
       apiChatList: Api.stats.list,
       apiConversation: Api.stats.conversation,
+      inboxEntries: Object.keys(data.inbox).length,
       timeTracking: !data.settings.tracking ? 'off' : trackingPaused() ? 'paused' : (tracker.counting && tracker.open && tracker.open.kind) || 'not counting',
       pageBackground: pageBg,
       browser: navigator.userAgent.replace(/^.*(Chrome\/[\d.]+).*$/, '$1'),
@@ -584,6 +648,7 @@
   function start(loaded) {
     data = loaded;
     Store.onChanged((changes, area) => {
+      if (area === 'local' && changes.inbox) showToast(Inbox.arrivals(changes.inbox.oldValue, changes.inbox.newValue), changes.inbox.newValue || {});
       Store.applyChanges(data, area, changes);
       if (area === 'local' && changes.discard && changes.discard.newValue) applyDiscard(changes.discard.newValue);
       // Our own time flushes land here too; they don't change anything on the page.

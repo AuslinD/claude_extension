@@ -124,6 +124,17 @@
     await sleep(800);
     R.sidebarOff = snap();
 
+    // 9b. A subagent finishing in another chat shows a toast; one in the chat you're looking at is marked read
+    const entry = (chatId, task) => ({ chatId, projectId: null, name: 'agent', task, summary: 'Found 3 sources.', isError: false, finishedAt: Date.now(), unread: true });
+    await chrome.storage.local.set({ inbox: { tu1: entry(ids.A, 'Research flights') } });
+    await sleep(300);
+    const toast = document.getElementById('ccc-toast');
+    R.toast = toast && !toast.hidden ? toast.textContent : null;
+    await chrome.storage.local.set({ inbox: { ...(await chrome.storage.local.get('inbox')).inbox, tu2: entry(ids.B, 'Summarize PDF') } });
+    await sleep(1500);
+    const inbox = (await chrome.storage.local.get('inbox')).inbox;
+    R.inboxUnread = { A: inbox.tu1.unread, B: inbox.tu2.unread };
+
     // 10. Time tracking. Each phase is measured as the change in stored totals (segments are
     //     flushed every 500 ms in the fixture).
     const kinds = async () => {

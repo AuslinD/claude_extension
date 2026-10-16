@@ -34,6 +34,7 @@
         "src/activity.js",
         "src/storage.js",
         "src/api.js",
+        "src/inbox.js",
         "src/palette-ui.js",
         "src/content.js"
       ],

@@ -52,6 +52,11 @@ Optional: pin the extension. Click the puzzle-piece icon → 📌.
 - **Pause** from the popup (until resumed, 15 min, or 1 h) or with **Alt+Shift+P**. While paused, a small ⏸ shows after the chat name above the message box. **Discard last 10 min** removes time that shouldn't have counted.
 - Details: [docs/TIME_TRACKING.md](docs/TIME_TRACKING.md).
 
+**Subagent inbox**
+- When Claude hands part of a reply to a subagent, the extension saves a summary once that subagent finishes: what it was asked to do, the start of what it returned, and which chat it ran in.
+- A small notice pops up in the corner of claude.ai. Click it to jump to that chat.
+- The popup's **Subagent inbox** groups summaries by project, with chats outside a project last. Unread ones count toward the green toolbar number. Opening a chat marks its summaries read.
+
 **Settings (in the popup):** turn the top bar, message-box glow, sidebar colors, faint page tint, and project grouping on or off.
 
 ## Privacy
@@ -72,6 +77,7 @@ The diagnostics show what the extension could and couldn't find on the page, lik
 - `STOP_BUTTON_SELECTORS` / `STREAMING_SELECTORS`: detecting a running response
 - `chatLinks`: which chat links get colored
 - `projectIdOnPage`: the project breadcrumb on a chat page
+- `SUBAGENT_TOOL_RE` (in [`src/api.js`](src/api.js)): which tool calls in a reply count as subagents
 
 ## How "running / done" works
 - The tab you're looking at watches for Claude's **Stop** button. It shares that state with all your claude.ai tabs through extension storage.
@@ -95,6 +101,7 @@ npm run icons       # regenerate icons/
 | `src/selectors.js` | All claude.ai page assumptions |
 | `src/api.js` | Reads chat list / conversation from claude.ai's own web API (best effort) |
 | `src/storage.js` | `chrome.storage` layout |
+| `src/inbox.js` | Subagent inbox: adding, read state, grouping by project (pure, tested) |
 | `src/content.js` | Runs on claude.ai: painting, picker, status tracking, time tracking |
 | `src/palette-ui.js` | The color grid used by the picker and the popup |
 | `src/background.js` | Toolbar badge count, Alt+Shift+P pause shortcut |

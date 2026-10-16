@@ -3,26 +3,60 @@
 (function (root) {
   'use strict';
 
-  // -> { projectMap: {chatId: projectId|null}, titles: {chatId: name}, projectRank: {chatId: 0..n} }
+  // -> { projectMap: {chatId: projectId|null}, titles: {chatId: name}, projectRank: {chatId: 0..n},
+  //      projectNames: {projectId: name} }
   // Rank = position in the project by creation time, newest first. Creation time (not last
   // activity) keeps a chat's shade stable when you reply in a sibling chat.
   function parseConversationList(json) {
     const arr = Array.isArray(json) ? json : json && (json.data || json.conversations);
     if (!Array.isArray(arr)) return null;
-    const projectMap = {}, titles = {}, projectRank = {}, byProject = {};
+    const projectMap = {}, titles = {}, projectRank = {}, projectNames = {}, byProject = {};
     for (const c of arr) {
       const id = c && (c.uuid || c.id);
       if (!id) continue;
       const pid = c.project_uuid || (c.project && c.project.uuid) || null;
       projectMap[id] = pid;
       if (c.name) titles[id] = c.name;
+      if (pid && c.project && c.project.name) projectNames[pid] = c.project.name;
       if (pid) (byProject[pid] = byProject[pid] || []).push({ id, t: Date.parse(c.created_at || c.updated_at || '') || 0 });
     }
     for (const list of Object.values(byProject)) {
       list.sort((a, b) => b.t - a.t);
       list.forEach((c, i) => { projectRank[c.id] = i; });
     }
-    return { projectMap, titles, projectRank };
+    return { projectMap, titles, projectRank, projectNames };
+  }
+
+  // Tool calls that hand work to a subagent. claude.ai doesn't document these names, so match broadly.
+  const SUBAGENT_TOOL_RE = /agent|subtask|task|delegate|extended_search/i;
+
+  function blockText(content) {
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return '';
+    return content.map((b) => (typeof b === 'string' ? b : b && (b.text || b.content && blockText(b.content)) || '')).join(' ');
+  }
+
+  // Subagents launched in one message -> [{ id, name, task, summary, done, isError, finishedAt }]
+  function extractSubagents(message) {
+    const blocks = message && Array.isArray(message.content) ? message.content : [];
+    const results = {};
+    for (const b of blocks) if (b && b.type === 'tool_result' && b.tool_use_id) results[b.tool_use_id] = b;
+    const out = [];
+    for (const b of blocks) {
+      if (!b || b.type !== 'tool_use' || !b.id || !SUBAGENT_TOOL_RE.test(b.name || '')) continue;
+      const input = b.input || {};
+      const r = results[b.id];
+      out.push({
+        id: b.id,
+        name: b.name,
+        task: input.description || input.title || input.task || input.prompt || input.command || '',
+        summary: r ? blockText(r.content) : '',
+        done: !!r,
+        isError: !!(r && r.is_error),
+        finishedAt: r ? Date.parse(r.stop_timestamp || r.start_timestamp || '') || null : null,
+      });
+    }
+    return out;
   }
 
   function summarizeConversation(json) {
@@ -40,6 +74,8 @@
       lastUpdatedAt: last ? last.updated_at || last.created_at || null : null,
       lastLen,
       stopReason: (last && last.stop_reason) || null,
+      // Only the latest reply, so opening an old chat doesn't fill the inbox with past runs.
+      subagents: last && last.sender === 'assistant' ? extractSubagents(last) : [],
     };
   }
 
@@ -104,7 +140,10 @@
     ));
   }
 
-  const api = { stats, parseConversationList, summarizeConversation, fetchConversationList, fetchConversationSummary };
+  const api = {
+    stats, SUBAGENT_TOOL_RE,
+    parseConversationList, extractSubagents, summarizeConversation, fetchConversationList, fetchConversationSummary,
+  };
   root.CCC = root.CCC || {};
   root.CCC.api = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

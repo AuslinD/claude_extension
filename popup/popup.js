@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const { colors: Colors, storage: Store, paletteUI, activity: Act } = globalThis.CCC;
+  const { colors: Colors, storage: Store, inbox: Inbox, paletteUI, activity: Act } = globalThis.CCC;
   const $ = (s) => document.querySelector(s);
   let target = null; // 'chat' | 'project' for the current chat's picker
   let lastInfo = null;
@@ -111,6 +111,55 @@
         el('span', { className: 'badge ' + r.kind, textContent: r.kind === 'done' ? (r.uncertain ? '✓ Done?' : '✓ Done') : 'Running' }),
         el('span', { className: 'name', textContent: titles[r.id] || 'Chat ' + r.id.slice(0, 8) }),
         el('span', { className: 'meta', textContent: ago(r.t) }),
+      ]));
+    }
+  }
+
+  // ---------- subagent inbox, grouped by project ----------
+
+  async function renderInbox() {
+    const local = await chrome.storage.local.get(['inbox', 'titles', 'projectNames', 'auto']);
+    const sync = await chrome.storage.sync.get(null);
+    const groups = Inbox.groupByProject(local.inbox, local.projectNames || {});
+    const titles = local.titles || {};
+    const auto = local.auto || {};
+    $('#inbox-section').hidden = !groups.length;
+    const list = $('#inbox');
+    list.replaceChildren();
+    for (const g of groups) {
+      const items = el('ul');
+      for (const e of g.entries) {
+        items.append(el('li', {
+          className: 'entry clickable' + (e.unread ? ' unread' : '') + (e.isError ? ' error' : ''),
+          title: e.summary || 'Open this chat',
+          onclick: async () => {
+            await Store.updateLocal('inbox', (inbox) => Inbox.markRead(inbox, (_x, id) => id === e.id));
+            openChat(e.chatId);
+          },
+        }, [
+          el('div', { className: 'top' }, [
+            el('span', { className: 'unread-dot' }),
+            el('span', { className: 'task', textContent: e.task || e.name }),
+            el('span', { className: 'meta', textContent: ago(e.finishedAt) }),
+            el('button', {
+              className: 'x', textContent: '×', title: 'Remove from inbox',
+              onclick: (ev) => { ev.stopPropagation(); Store.mergeLocalMap('inbox', { [e.id]: null }); },
+            }),
+          ]),
+          el('div', { className: 'summary', textContent: e.summary || 'No summary returned.' }),
+          el('div', { className: 'meta', textContent: 'in ' + (titles[e.chatId] || 'Chat ' + e.chatId.slice(0, 8)) }),
+        ]));
+      }
+      const color = g.projectId
+        ? Colors.resolveColor({ chatId: '', projectId: g.projectId, projectOverride: sync['pcolor:' + g.projectId], projectAutoIndex: (auto.projects || {})[g.projectId], rank: 0 }).color
+        : 'var(--muted)';
+      list.append(el('li', { className: 'group' }, [
+        el('div', { className: 'ghead' }, [
+          el('span', { className: 'dot', style: { background: color } }),
+          el('span', { className: 'name', textContent: g.name }),
+          el('span', { className: 'count', textContent: g.unread ? `${g.unread} new` : '' }),
+        ]),
+        items,
       ]));
     }
   }
@@ -228,6 +277,8 @@
 
   $('#version').textContent = 'v' + chrome.runtime.getManifest().version;
   $('#mark-seen').addEventListener('click', () => Store.markAllSeen());
+  $('#inbox-read').addEventListener('click', () => Store.updateLocal('inbox', (inbox) => Inbox.markRead(inbox)));
+  $('#inbox-clear').addEventListener('click', () => chrome.storage.local.remove('inbox'));
   $('#diag').addEventListener('click', async () => {
     const info = await getInfo();
     const report = {
@@ -245,6 +296,7 @@
     pending = setTimeout(() => {
       renderCurrent().then(renderTime);
       renderActivity();
+      renderInbox();
       renderSettings();
       renderCustom();
     }, 60);
@@ -254,8 +306,10 @@
   // activity list for those so the color picker isn't rebuilt under your mouse.
   chrome.storage.onChanged.addListener((changes, area) => {
     const keys = Object.keys(changes);
-    if (area === 'local' && keys.every((k) => k.startsWith('status:') || k === 'auto')) renderActivity();
-    else if (area === 'local' && keys.every((k) => k.startsWith('time:') || k === 'pause' || k === 'discard')) renderTime();
+    if (area === 'local' && keys.every((k) => k.startsWith('status:') || k === 'auto' || k === 'inbox')) {
+      renderActivity();
+      if (keys.includes('inbox')) renderInbox();
+    } else if (area === 'local' && keys.every((k) => k.startsWith('time:') || k === 'pause' || k === 'discard')) renderTime();
     else renderAll();
   });
   renderAll();

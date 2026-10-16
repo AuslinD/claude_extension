@@ -209,3 +209,30 @@ a[data-ccc-status="uncertain"]::after {
 }
 .ccc-palette input.ccc-invalid { border-color: #ef4444; }
 .ccc-palette .ccc-pal-name { margin-top: 8px; min-height: 16px; font-size: 12px; opacity: 0.8; }
+
+/* ---------- subagent toast ---------- */
+
+#ccc-toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483646;
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
+  padding: 10px 12px 10px 16px;
+  border-radius: 10px;
+  background: #fff;
+  color: #1f1f1f;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  box-shadow: inset 5px 0 0 var(--ccc-c, #16a34a), 0 8px 24px rgba(0, 0, 0, 0.22);
+  font: 13px/1.35 system-ui, -apple-system, sans-serif;
+  cursor: pointer;
+}
+#ccc-toast[hidden] { display: none !important; }
+@media (prefers-color-scheme: dark) {
+  #ccc-toast { background: #2b2a27; color: #f1efe8; border-color: rgba(255, 255, 255, 0.15); }
+}
+#ccc-toast .ccc-toast-head { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.7; }
+#ccc-toast .ccc-toast-task { margin-top: 2px; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#ccc-toast .ccc-toast-where { font-size: 12px; opacity: 0.75; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
