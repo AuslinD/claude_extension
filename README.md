@@ -2,12 +2,6 @@
 
 A Chrome extension for **claude.ai** that gives every chat its own color, so you always know which chat you're typing into. It also shows in the sidebar which chats are still answering and which finished while you were away, and it tracks how your time splits between **prompting**, **waiting** for Claude, and **reading**.
 
-| Light | Dark |
-|---|---|
-| ![light mode](docs/screenshot-light.png) | ![dark mode](docs/screenshot-dark.png) |
-
-<sub>Demo page with made-up chat names.</sub>
-
 ## Install (about 1 minute)
 
 1. **Download** this repo:
